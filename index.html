@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ELECTROCARDIOGRAM — 3D ECG Simulator</title>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+--bg:#07090f;--panel:#0d1117;--panel2:#111827;--border:#1e293b;
+--accent:#3b82f6;--accent2:#06b6d4;--red:#ef4444;--green:#22c55e;
+--yellow:#eab308;--text:#e2e8f0;--muted:#94a3b8;--glow:rgba(59,130,246,.35);
+}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
+#header{
+  height:52px;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(135deg,#0d1117 0%,#111827 50%,#0d1117 100%);
+  border-bottom:1px solid var(--border);position:relative;flex-shrink:0;gap:14px;padding:0 16px;
+}
+#header::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--accent),var(--accent2),var(--accent),transparent);opacity:.5}
+.header-icon{width:28px;height:28px;position:relative}
+.header-icon .pulse-ring{position:absolute;inset:-4px;border:2px solid var(--red);border-radius:50%;animation:hpulse 1.5s ease-out infinite;opacity:0}
+@keyframes hpulse{0%{transform:scale(.7);opacity:.7}100%{transform:scale(1.4);opacity:0}}
+.header-icon svg{width:28px;height:28px;fill:var(--red);filter:drop-shadow(0 0 6px rgba(239,68,68,.5))}
+.header-title{font-size:clamp(13px,2.2vw,20px);font-weight:800;letter-spacing:.18em;text-transform:uppercase;background:linear-gradient(135deg,#ef4444 0%,#f97316 25%,#eab308 50%,#22c55e 75%,#3b82f6 100%);background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:shimmer 4s linear infinite}
+@keyframes shimmer{0%{background-position:0% center}100%{background-position:200% center}}
+.header-sub{font-size:clamp(8px,1.2vw,10px);color:var(--muted);letter-spacing:.12em;text-transform:uppercase;position:absolute;right:16px}
+.header-badge{position:absolute;left:16px;display:flex;align-items:center;gap:6px;font-size:10px;color:var(--green);font-weight:600;letter-spacing:.04em}
+.header-badge .dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:blink 1.2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+#app{display:flex;flex-direction:column;width:100%;height:100vh;overflow:hidden}
+#main-area{display:flex;flex:1;min-height:0;overflow:hidden}
+#heart-section{flex:1;display:flex;flex-direction:column;min-width:0}
+#heart-view{flex:1;position:relative;background:radial-gradient(ellipse at center,#1e2a45 0%,#141e33 40%,#0f1626 80%);border:1px solid var(--border);border-radius:8px;margin:4px;overflow:hidden;min-height:0}
+#heart-view canvas{width:100%!important;height:100%!important;display:block}
+#ecg-panel{height:clamp(100px,18vh,160px);position:relative;overflow:hidden;flex-shrink:0;background:var(--panel);border:1px solid var(--border);border-radius:8px;margin:0 4px 4px 4px}
+#ecg-canvas{width:100%;height:100%;display:block}
+#sidebar{width:clamp(240px,22vw,340px);background:var(--panel);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0}
+#controls{flex:1;padding:14px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+#controls::-webkit-scrollbar{width:4px}
+#controls::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+#stats-bar{display:flex;gap:2px;padding:4px;border-top:1px solid var(--border);flex-shrink:0}
+.stat-card{flex:1;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:6px;padding:8px 6px;text-align:center}
+.stat-card .stat-val{font-size:clamp(16px,2vw,22px);font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+.stat-card .stat-label{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-top:2px}
+.stat-bpm .stat-val{color:var(--green)}.stat-pr .stat-val{color:var(--accent2)}.stat-qrs .stat-val{color:var(--yellow)}.stat-qt .stat-val{color:var(--accent)}
+.ctrl-section{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--accent2);padding:4px 0 2px}
+.ctrl-group{background:rgba(255,255,255,.025);border:1px solid var(--border);border-radius:6px;padding:8px 10px}
+.ctrl-group label{display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--muted);margin-bottom:5px}
+.ctrl-group label .val{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums}
+input[type=range]{-webkit-appearance:none;width:100%;height:5px;border-radius:3px;background:#1e293b;outline:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid #e2e8f0;box-shadow:0 0 8px var(--glow)}
+.btn{width:100%;padding:8px;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;letter-spacing:.02em}
+.btn-primary{background:linear-gradient(135deg,var(--accent),#2563eb);color:#fff;box-shadow:0 2px 12px rgba(59,130,246,.25)}
+.btn-primary:hover{box-shadow:0 4px 20px rgba(59,130,246,.4);transform:translateY(-1px)}
+.btn-primary.active{background:linear-gradient(135deg,var(--red),#dc2626);box-shadow:0 2px 12px rgba(239,68,68,.3)}
+.btn-secondary{background:rgba(255,255,255,.04);color:var(--text);border:1px solid var(--border)}
+.btn-secondary:hover{background:rgba(255,255,255,.08)}
+.btn-secondary.active{background:rgba(59,130,246,.12);border-color:var(--accent);color:var(--accent)}
+.btn-row{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.hud-tl{position:absolute;top:10px;left:10px;z-index:10}
+.hud-tr{position:absolute;top:10px;right:10px;z-index:10}
+.hud-bl{position:absolute;bottom:10px;left:10px;z-index:10}
+.hud-box{background:rgba(0,0,0,.65);backdrop-filter:blur(10px);border:1px solid var(--border);border-radius:6px;padding:6px 12px}
+.hud-live{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:600;letter-spacing:.04em}
+.hud-live .dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:blink 1.2s infinite}
+#bpm-box .num{font-size:clamp(22px,3vw,32px);font-weight:800;color:var(--green);line-height:1;font-variant-numeric:tabular-nums}
+#bpm-box .unit{font-size:10px;color:var(--muted);margin-top:1px}
+.hud-phase{font-size:10px;color:var(--muted);max-width:220px}
+.hud-phase .phase-name{color:var(--yellow);font-weight:700;font-size:12px;margin-bottom:2px}
+.annotation{position:absolute;pointer-events:none;z-index:20;transition:opacity .3s}
+.annotation .aline{width:1px;height:24px;background:linear-gradient(to bottom,var(--accent2),transparent);margin:0 auto}
+.annotation .atag{background:rgba(6,182,212,.12);border:1px solid rgba(6,182,212,.4);border-radius:4px;padding:1px 7px;font-size:9px;font-weight:700;color:var(--accent2);white-space:nowrap;text-align:center}
+.annotation .adesc{font-size:8px;color:var(--muted);text-align:center;margin-top:1px;max-width:90px}
+#ecg-label{position:absolute;top:6px;left:10px;font-size:10px;font-weight:700;color:var(--green);letter-spacing:.06em;text-transform:uppercase;z-index:5}
+#ecg-info{position:absolute;top:6px;right:10px;font-size:9px;color:var(--muted);z-index:5}
+#learn-overlay{position:absolute;bottom:8px;left:8px;right:8px;background:rgba(0,0,0,.82);backdrop-filter:blur(12px);border:1px solid rgba(234,179,8,.2);border-radius:8px;padding:10px 14px;z-index:30;opacity:0;pointer-events:none;transition:opacity .3s}
+#learn-overlay.show{opacity:1;pointer-events:auto}
+#learn-overlay .lo-title{font-size:12px;font-weight:700;color:var(--yellow);margin-bottom:3px}
+#learn-overlay .lo-desc{font-size:10px;color:var(--muted);line-height:1.5}
+#learn-overlay .lo-bar{height:3px;background:var(--border);border-radius:2px;margin-top:6px;overflow:hidden}
+#learn-overlay .lo-bar-fill{height:100%;background:linear-gradient(90deg,var(--yellow),var(--green));border-radius:2px;transition:width .1s}
+#ecg-fullscreen{display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.95);flex-direction:column;align-items:center;justify-content:center}
+#ecg-fullscreen.show{display:flex}
+#ecg-fullscreen canvas{width:95vw!important;height:70vh!important;border-radius:8px;border:1px solid var(--border)}
+#ecg-fullscreen .close-btn{position:absolute;top:16px;right:20px;background:rgba(255,255,255,.1);border:1px solid var(--border);color:var(--text);width:36px;height:36px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+#drawer-toggle{display:none}
+@media(max-width:1024px){#sidebar{width:clamp(200px,28vw,280px)}}
+@media(max-width:768px){
+  #main-area{flex-direction:column}
+  #sidebar{display:none;position:fixed;bottom:0;left:0;right:0;z-index:100;width:100%;height:auto;max-height:55vh;border-left:none;border-top:1px solid var(--border);border-radius:16px 16px 0 0;box-shadow:0 -8px 40px rgba(0,0,0,.6);transform:translateY(100%);transition:transform .35s cubic-bezier(.4,0,.2,1)}
+  #sidebar.open{display:flex;transform:translateY(0)}
+  #sidebar .drag-handle{display:block;width:36px;height:4px;background:var(--muted);border-radius:2px;margin:10px auto 4px;flex-shrink:0;opacity:.4}
+  #drawer-toggle{display:flex;position:fixed;bottom:12px;right:12px;z-index:90;width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;color:#fff;font-size:22px;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 20px rgba(59,130,246,.4)}
+  #ecg-panel{height:clamp(80px,14vh,120px);margin:0 4px 4px}
+  #heart-view{margin:4px 4px 2px}
+  .stat-card .stat-val{font-size:16px}
+  .header-sub{display:none}
+}
+@media(max-width:480px){
+  #header{height:44px}
+  .header-icon{width:22px;height:22px}.header-icon svg{width:22px;height:22px}
+  .header-badge{font-size:8px;gap:4px;left:8px}.header-badge .dot{width:5px;height:5px}
+  #ecg-panel{height:clamp(70px,12vh,100px)}
+  #heart-view{margin:2px}#ecg-panel{margin:0 2px 2px}
+  .hud-box{padding:4px 8px}#bpm-box .num{font-size:20px}.hud-live{font-size:9px}
+  #stats-bar{padding:2px;gap:1px}.stat-card{padding:4px 2px}.stat-card .stat-val{font-size:14px}.stat-card .stat-label{font-size:7px}
+}
+@media(max-width:360px){.header-title{letter-spacing:.08em}.header-badge{display:none}#ecg-panel{height:65px}#stats-bar{display:none}}
+@media(min-width:769px){#sidebar .drag-handle{display:none}}
+@media(max-height:500px) and (orientation:landscape){
+  #header{height:36px}.header-icon{width:18px;height:18px}.header-icon svg{width:18px;height:18px}
+  #main-area{flex-direction:row}
+  #sidebar{width:220px;display:flex;position:static;transform:none;max-height:none;border-radius:0;border-top:none;border-left:1px solid var(--border)}
+  #drawer-toggle{display:none}#ecg-panel{height:clamp(50px,20vh,80px)}#stats-bar{display:none}.header-badge{display:none}
+}
+</style>
+</head>
+<body>
+<div id="app">
+<div id="header">
+  <div class="header-badge"><div class="dot"></div> LIVE</div>
+  <div class="header-icon"><div class="pulse-ring"></div><svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></div>
+  <span class="header-title">ELECTROCARDIOGRAM</span>
+  <span class="header-sub">3D Interactive Simulator</span>
+</div>
+<div id="main-area">
+  <div id="heart-section">
+    <div id="heart-view">
+      <div class="hud-tl"><div class="hud-box hud-live"><div class="dot"></div>LIVE SIM</div></div>
+      <div class="hud-tr"><div class="hud-box" id="bpm-box"><div class="num" id="bpm-num">72</div><div class="unit">BPM</div></div></div>
+      <div class="hud-bl" id="phase-hud" style="opacity:0"><div class="hud-box hud-phase"><div class="phase-name" id="phase-title2"></div><div id="phase-desc2"></div></div></div>
+      <div id="learn-overlay">
+        <div class="lo-title" id="phase-title">SA Node Firing</div>
+        <div class="lo-desc" id="phase-desc">The sinoatrial node initiates the electrical impulse.</div>
+        <div class="lo-bar"><div class="lo-bar-fill" id="lo-bar-fill" style="width:0%"></div></div>
+      </div>
+    </div>
+    <div id="ecg-panel">
+      <div id="ecg-label">ECG Lead II</div>
+      <div id="ecg-info">25mm/s &middot; 10mm/mV</div>
+      <canvas id="ecg-canvas"></canvas>
+    </div>
+  </div>
+  <div id="sidebar">
+    <div class="drag-handle"></div>
+    <div id="stats-bar">
+      <div class="stat-card stat-bpm"><div class="stat-val" id="stat-bpm">72</div><div class="stat-label">HR bpm</div></div>
+      <div class="stat-card stat-pr"><div class="stat-val" id="stat-pr">160</div><div class="stat-label">PR ms</div></div>
+      <div class="stat-card stat-qrs"><div class="stat-val" id="stat-qrs">90</div><div class="stat-label">QRS ms</div></div>
+      <div class="stat-card stat-qt"><div class="stat-val" id="stat-qt">380</div><div class="stat-label">QTc ms</div></div>
+    </div>
+    <div id="controls">
+      <div class="ctrl-section">Simulation</div>
+      <button class="btn btn-primary" id="btn-toggle">Start Simulation</button>
+      <div class="ctrl-group"><label>Heart Rate <span class="val"><span id="hr-val">72</span> BPM</span></label><input type="range" id="hr-slider" min="40" max="160" value="72"></div>
+      <div class="ctrl-group"><label>Speed <span class="val"><span id="speed-val">1.0</span>x</span></label><input type="range" id="speed-slider" min="0.2" max="3" value="1" step="0.1"></div>
+      <div class="ctrl-group"><label>ECG Noise <span class="val"><span id="noise-val">0</span>%</span></label><input type="range" id="noise-slider" min="0" max="50" value="0"></div>
+      <div class="ctrl-section">Display</div>
+      <div class="btn-row"><button class="btn btn-secondary" id="btn-labels">Labels</button><button class="btn btn-secondary" id="btn-conduction">Conduction</button></div>
+      <div class="btn-row"><button class="btn btn-secondary" id="btn-learn">Learn Mode</button><button class="btn btn-secondary" id="btn-reset-cam">Reset Cam</button></div>
+      <div class="ctrl-section">Presets</div>
+      <div class="btn-row"><button class="btn btn-secondary preset-btn" data-bpm="60">Normal (60)</button><button class="btn btn-secondary preset-btn" data-bpm="100">Tachy (100)</button></div>
+      <div class="btn-row"><button class="btn btn-secondary preset-btn" data-bpm="45">Brady (45)</button><button class="btn btn-secondary preset-btn" data-bpm="150">SVT (150)</button></div>
+      <div class="ctrl-section">View</div>
+      <button class="btn btn-secondary" id="btn-fullscreen-ecg">Fullscreen ECG</button>
+    </div>
+  </div>
+</div>
+</div>
+<button id="drawer-toggle" aria-label="Open Controls">&#9881;</button>
+<div id="ecg-fullscreen"><canvas id="ecg-canvas-fs"></canvas><button class="close-btn" id="close-fs">&times;</button></div>
+
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+
+const S={running:false,bpm:72,speed:1,noise:0,showLabels:false,showConduction:false,showLearn:false,phase:0,phaseTime:0,beatDuration:60/72,pulseScale:1,time:0,fullscreenECG:false};
+
+const container=document.getElementById('heart-view');
+const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true,powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+renderer.shadowMap.enabled=true;
+renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.4;
+container.appendChild(renderer.domElement);
+
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x141e33);
+scene.fog=new THREE.FogExp2(0x141e33,0.025);
+const camera=new THREE.PerspectiveCamera(42,1,0.1,100);
+camera.position.set(0,0.8,5.5);
+const orbitCtrl=new OrbitControls(camera,renderer.domElement);
+orbitCtrl.enableDamping=true;orbitCtrl.dampingFactor=0.07;
+orbitCtrl.minDistance=2.5;orbitCtrl.maxDistance=10;
+orbitCtrl.target.set(0,-0.2,0);orbitCtrl.enablePan=false;
+orbitCtrl.saveState();
+
+/* ===== LIGHTS ===== */
+scene.add(new THREE.AmbientLight(0x4a3548,1.2));
+const keyL=new THREE.DirectionalLight(0xfff0e0,2.8);
+keyL.position.set(5,8,6);keyL.castShadow=true;keyL.shadow.mapSize.set(2048,2048);scene.add(keyL);
+const fillL=new THREE.PointLight(0x6688cc,1.0,18);fillL.position.set(-5,3,-3);scene.add(fillL);
+const rimL=new THREE.PointLight(0xff5555,0.9,16);rimL.position.set(2,-4,-5);scene.add(rimL);
+const topL=new THREE.PointLight(0x99bbff,0.7,12);topL.position.set(0,6,2);scene.add(topL);
+const backL=new THREE.PointLight(0x884444,0.7,14);backL.position.set(-3,-2,4);scene.add(backL);
+const frontL=new THREE.PointLight(0xeeddcc,0.5,12);frontL.position.set(0,0,6);scene.add(frontL);
+
+/* ============================================================
+   ANATOMICALLY REALISTIC HEART — PROCEDURAL GEOMETRY
+   ============================================================ */
+const heartGroup=new THREE.Group();
+scene.add(heartGroup);
+
+// Organic tissue shader material
+function makeOrganMat(baseColor, darkColor, roughness=0.65){
+  return new THREE.ShaderMaterial({
+    uniforms:{
+      uTime:{value:0},uPulse:{value:0},
+      uBase:{value:new THREE.Color(baseColor)},
+      uDark:{value:new THREE.Color(darkColor)},
+      uRough:{value:roughness},
+      lightPos:{value:new THREE.Vector3(5,8,6)},
+      viewPos:{value:new THREE.Vector3()},
+    },
+    vertexShader:`
+      varying vec3 vNormal;varying vec3 vWorldPos;varying vec2 vUv;varying vec3 vLocalPos;
+      uniform float uPulse;
+      void main(){
+        vUv=uv;vNormal=normalize(normalMatrix*normal);
+        vLocalPos=position;
+        vec4 wp=modelMatrix*vec4(position,1.0);
+        vWorldPos=wp.xyz;
+        gl_Position=projectionMatrix*viewMatrix*wp;
+      }`,
+    fragmentShader:`
+      uniform vec3 uBase,uDark,lightPos,viewPos;
+      uniform float uTime,uPulse,uRough;
+      varying vec3 vNormal,vWorldPos,vLocalPos;varying vec2 vUv;
+
+      // Simplex-like noise
+      float hash(vec3 p){return fract(sin(dot(p,vec3(127.1,311.7,74.7)))*43758.5453);}
+      float noise3(vec3 p){
+        vec3 i=floor(p);vec3 f=fract(p);f=f*f*(3.0-2.0*f);
+        return mix(mix(mix(hash(i),hash(i+vec3(1,0,0)),f.x),mix(hash(i+vec3(0,1,0)),hash(i+vec3(1,1,0)),f.x),f.y),
+                   mix(mix(hash(i+vec3(0,0,1)),hash(i+vec3(1,0,1)),f.x),mix(hash(i+vec3(0,1,1)),hash(i+vec3(1,1,1)),f.x),f.y),f.z);
+      }
+      float fbm(vec3 p){return noise3(p)*0.5+noise3(p*2.0)*0.25+noise3(p*4.0)*0.125;}
+
+      // Subsurface scattering approximation
+      vec3 sss(vec3 N,vec3 L,vec3 V,vec3 col){
+        float scat=max(0.0,dot(-N,L))*0.4;
+        float fresnel=pow(1.0-max(0.0,dot(N,V)),3.0)*0.3;
+        return col*(scat+fresnel)*vec3(1.0,0.15,0.08);
+      }
+
+      void main(){
+        vec3 N=normalize(vNormal);
+        vec3 L=normalize(lightPos-vWorldPos);
+        vec3 V=normalize(viewPos-vWorldPos);
+        vec3 H=normalize(L+V);
+
+        // Tissue noise texture
+        float n=fbm(vLocalPos*6.0+uTime*0.1);
+        float veinN=fbm(vLocalPos*12.0+vec3(0,uTime*0.05,0));
+        float veinMask=smoothstep(0.42,0.48,veinN)*0.35;
+
+        // Base color with variation
+        vec3 base=mix(uBase,uDark,n*0.6+0.2);
+        // Veins (darker bluish-purple streaks)
+        vec3 veinCol=vec3(0.15,0.08,0.2);
+        base=mix(base,veinCol,veinMask);
+
+        // Pulse flush — more red during contraction
+        base=mix(base,vec3(0.85,0.12,0.1),uPulse*0.25);
+
+        // Diffuse
+        float diff=max(dot(N,L),0.0)*0.8+0.2;
+
+        // Specular (wet tissue look)
+        float spec=pow(max(dot(N,H),0.0),40.0)*0.5*(1.0-uRough);
+
+        // SSS
+        vec3 scatter=sss(N,L,V,base);
+
+        // Rim light
+        float rim=pow(1.0-max(0.0,dot(N,V)),3.5)*0.4;
+        vec3 rimCol=mix(vec3(0.4,0.1,0.1),vec3(0.8,0.2,0.15),uPulse);
+
+        vec3 col=base*diff+vec3(1.0,0.95,0.9)*spec+scatter+rimCol*rim;
+
+        // Ambient occlusion from local pos (bottom darker)
+        float ao=smoothstep(-1.5,0.5,vLocalPos.y)*0.4+0.6;
+        col*=ao;
+
+        gl_FragColor=vec4(col,1.0);
+      }`,
+    side:THREE.DoubleSide,
+  });
+}
+
+const heartMat=makeOrganMat(0x8b2020, 0x4a0e0e, 0.55);
+const vesselMat=makeOrganMat(0x7a1a1a, 0x3a0808, 0.5);
+const aortaMat=makeOrganMat(0xcc3333, 0x661818, 0.45);
+const veinMat=makeOrganMat(0x3a2050, 0x1a0e30, 0.6);
+
+/* Helper: deform sphere into organic blob */
+function deformGeo(geo, fn){
+  const pos=geo.attributes.position;
+  for(let i=0;i<pos.count;i++){
+    const x=pos.getX(i),y=pos.getY(i),z=pos.getZ(i);
+    const [nx,ny,nz]=fn(x,y,z,i);
+    pos.setXYZ(i,nx,ny,nz);
+  }
+  pos.needsUpdate=true;
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/* ---- LEFT VENTRICLE (main muscular pump, largest chamber) ---- */
+const lvGeo=new THREE.SphereGeometry(1,48,48);
+deformGeo(lvGeo,(x,y,z)=>{
+  const theta=Math.atan2(z,x);
+  const py=y;
+  // Egg-shaped, pointy at bottom
+  let sy=1.35;
+  let sx=0.82+py*0.15;
+  let sz=0.75+py*0.12;
+  // Taper to apex at bottom
+  if(py<0){
+    const t=Math.abs(py);
+    sx*=1-t*0.45;
+    sz*=1-t*0.45;
+  }
+  // Slight left offset
+  let ox=-0.1;
+  // Organic noise
+  const n=Math.sin(theta*5+py*3)*0.02+Math.sin(theta*8+py*6)*0.01;
+  return [x*sx+ox+n, y*sy, z*sz+n];
+});
+const lvMesh=new THREE.Mesh(lvGeo,heartMat);
+lvMesh.position.set(-0.15,-0.3,0);
+lvMesh.castShadow=true;
+heartGroup.add(lvMesh);
+
+/* ---- RIGHT VENTRICLE (wraps around LV, thinner wall) ---- */
+const rvGeo=new THREE.SphereGeometry(0.75,40,40);
+deformGeo(rvGeo,(x,y,z)=>{
+  const theta=Math.atan2(z,x);
+  let sy=1.15;
+  let sx=0.7;
+  let sz=0.85;
+  const py=y;
+  if(py<0){
+    const t=Math.abs(py);
+    sx*=1-t*0.4;
+    sz*=1-t*0.35;
+  }
+  // Wrap to the right and forward
+  let ox=0.45;
+  let oz=0.2;
+  const n=Math.sin(theta*6+py*4)*0.015;
+  return [x*sx+ox+n, y*sy, z*sz+oz+n];
+});
+const rvMesh=new THREE.Mesh(rvGeo,heartMat);
+rvMesh.position.set(0.2,-0.2,0.15);
+rvMesh.castShadow=true;
+heartGroup.add(rvMesh);
+
+/* ---- LEFT ATRIUM (upper left back) ---- */
+const laGeo=new THREE.SphereGeometry(0.6,36,36);
+deformGeo(laGeo,(x,y,z)=>{
+  let sx=0.75,sy=0.65,sz=0.7;
+  const n=Math.sin(x*8+y*6)*0.015;
+  return [x*sx+n, y*sy+n, z*sz];
+});
+const laMesh=new THREE.Mesh(laGeo,heartMat);
+laMesh.position.set(-0.3,1.05,-0.15);
+laMesh.castShadow=true;
+heartGroup.add(laMesh);
+
+/* ---- RIGHT ATRIUM (upper right front) ---- */
+const raGeo=new THREE.SphereGeometry(0.58,36,36);
+deformGeo(raGeo,(x,y,z)=>{
+  let sx=0.72,sy=0.62,sz=0.68;
+  const n=Math.sin(x*7+y*5)*0.012;
+  return [x*sx+n, y*sy, z*sz+n];
+});
+const raMesh=new THREE.Mesh(raGeo,heartMat);
+raMesh.position.set(0.45,0.95,0.2);
+raMesh.castShadow=true;
+heartGroup.add(raMesh);
+
+/* ---- INTERVENTRICULAR SEPTUM (ridge between ventricles) ---- */
+const septGeo=new THREE.CylinderGeometry(0.12,0.08,1.8,16);
+deformGeo(septGeo,(x,y,z)=>{
+  const t=(y+0.9)/1.8;
+  const sx=1+Math.sin(t*Math.PI)*0.5;
+  return [x*sx,y,z*sx*0.6];
+});
+const septMesh=new THREE.Mesh(septGeo,heartMat);
+septMesh.position.set(0.18,-0.15,0.15);
+septMesh.rotation.z=-0.1;
+heartGroup.add(septMesh);
+
+/* ---- AORTA (main artery, curves up and back) ---- */
+const aortaPts=[
+  new THREE.Vector3(-0.05,0.7,0.1),
+  new THREE.Vector3(-0.15,1.6,0.15),
+  new THREE.Vector3(-0.1,2.2,0),
+  new THREE.Vector3(0.15,2.5,-0.2),
+  new THREE.Vector3(0.5,2.35,-0.5),
+  new THREE.Vector3(0.6,1.9,-0.7),
+];
+const aortaCurve=new THREE.CatmullRomCurve3(aortaPts);
+const aortaTube=new THREE.TubeGeometry(aortaCurve,40,0.18,16,false);
+// Taper the aorta
+deformGeo(aortaTube,(x,y,z,i)=>{
+  const uv=aortaTube.attributes.uv;
+  const u=uv?uv.getX(i):0;
+  return [x,y,z];
+});
+const aortaMesh=new THREE.Mesh(aortaTube,aortaMat);
+aortaMesh.castShadow=true;
+heartGroup.add(aortaMesh);
+
+/* ---- PULMONARY ARTERY (from RV, splits into two) ---- */
+const paPts=[
+  new THREE.Vector3(0.35,0.6,0.35),
+  new THREE.Vector3(0.2,1.3,0.5),
+  new THREE.Vector3(-0.1,1.8,0.3),
+  new THREE.Vector3(-0.4,1.9,0.1),
+];
+const paCurve=new THREE.CatmullRomCurve3(paPts);
+const paTube=new THREE.TubeGeometry(paCurve,30,0.14,12,false);
+const paMesh=new THREE.Mesh(paTube,aortaMat);
+heartGroup.add(paMesh);
+
+/* ---- SUPERIOR VENA CAVA (large vein into RA) ---- */
+const svcPts=[
+  new THREE.Vector3(0.6,0.9,0.15),
+  new THREE.Vector3(0.65,1.5,0.1),
+  new THREE.Vector3(0.6,2.1,0),
+  new THREE.Vector3(0.55,2.6,-0.1),
+];
+const svcCurve=new THREE.CatmullRomCurve3(svcPts);
+const svcMesh=new THREE.Mesh(new THREE.TubeGeometry(svcCurve,25,0.12,10,false),veinMat);
+heartGroup.add(svcMesh);
+
+/* ---- INFERIOR VENA CAVA ---- */
+const ivcPts=[
+  new THREE.Vector3(0.5,0.4,0.05),
+  new THREE.Vector3(0.55,-0.2,-0.1),
+  new THREE.Vector3(0.5,-0.8,-0.2),
+];
+const ivcCurve=new THREE.CatmullRomCurve3(ivcPts);
+const ivcMesh=new THREE.Mesh(new THREE.TubeGeometry(ivcCurve,20,0.11,10,false),veinMat);
+heartGroup.add(ivcMesh);
+
+/* ---- PULMONARY VEINS (into LA, 4 of them) ---- */
+const pvData=[
+  [new THREE.Vector3(-0.5,1.1,-0.25),new THREE.Vector3(-0.9,1.3,-0.5),new THREE.Vector3(-1.2,1.5,-0.6)],
+  [new THREE.Vector3(-0.5,1.15,-0.1),new THREE.Vector3(-0.85,1.4,0),new THREE.Vector3(-1.15,1.6,0.1)],
+  [new THREE.Vector3(-0.35,1.2,-0.3),new THREE.Vector3(-0.7,1.5,-0.6),new THREE.Vector3(-1.0,1.7,-0.75)],
+  [new THREE.Vector3(-0.4,1.0,0.0),new THREE.Vector3(-0.75,1.15,0.15),new THREE.Vector3(-1.05,1.3,0.25)],
+];
+pvData.forEach(pts=>{
+  const c=new THREE.CatmullRomCurve3(pts.map(p=>p));
+  const m=new THREE.Mesh(new THREE.TubeGeometry(c,15,0.06,8,false),veinMat);
+  heartGroup.add(m);
+});
+
+/* ---- CORONARY ARTERIES (on surface) ---- */
+function makeCoronary(pts,radius=0.03){
+  const c=new THREE.CatmullRomCurve3(pts);
+  const mat=new THREE.MeshPhysicalMaterial({
+    color:0xcc4444,roughness:0.5,metalness:0,clearcoat:0.6,
+    emissive:0x331111,emissiveIntensity:0.2,
+  });
+  const m=new THREE.Mesh(new THREE.TubeGeometry(c,30,radius,6,false),mat);
+  m.castShadow=true;
+  heartGroup.add(m);
+  return m;
+}
+
+// Left anterior descending (LAD)
+makeCoronary([
+  new THREE.Vector3(-0.05,0.6,0.65),
+  new THREE.Vector3(0.0,0.2,0.75),
+  new THREE.Vector3(0.05,-0.2,0.72),
+  new THREE.Vector3(0.1,-0.6,0.58),
+  new THREE.Vector3(0.08,-1.0,0.4),
+],0.028);
+
+// Left circumflex (LCx)
+makeCoronary([
+  new THREE.Vector3(-0.1,0.55,0.6),
+  new THREE.Vector3(-0.4,0.4,0.55),
+  new THREE.Vector3(-0.65,0.15,0.35),
+  new THREE.Vector3(-0.7,-0.1,0.1),
+  new THREE.Vector3(-0.6,-0.35,-0.15),
+],0.025);
+
+// Right coronary artery (RCA)
+makeCoronary([
+  new THREE.Vector3(0.5,0.7,0.45),
+  new THREE.Vector3(0.7,0.4,0.5),
+  new THREE.Vector3(0.75,0.0,0.4),
+  new THREE.Vector3(0.65,-0.35,0.25),
+  new THREE.Vector3(0.45,-0.6,0.1),
+  new THREE.Vector3(0.2,-0.8,-0.05),
+],0.025);
+
+// Diagonal branch
+makeCoronary([
+  new THREE.Vector3(0.0,0.3,0.74),
+  new THREE.Vector3(-0.25,0.1,0.7),
+  new THREE.Vector3(-0.45,-0.1,0.55),
+],0.018);
+
+/* ---- FAT PAD (epicardial fat, yellowish patches) ---- */
+function makeFatPad(pos,scale){
+  const g=new THREE.SphereGeometry(0.15,12,12);
+  const m=new THREE.Mesh(g,new THREE.MeshPhysicalMaterial({
+    color:0xd4a040,roughness:0.8,metalness:0,transparent:true,opacity:0.4,
+  }));
+  m.position.copy(pos);m.scale.copy(scale);
+  heartGroup.add(m);
+}
+makeFatPad(new THREE.Vector3(0.05,0.65,0.55),new THREE.Vector3(1.5,0.5,1));
+makeFatPad(new THREE.Vector3(0.5,0.55,0.4),new THREE.Vector3(1,0.4,0.8));
+
+/* ---- AORTIC VALVE RING ---- */
+const valveGeo=new THREE.TorusGeometry(0.16,0.04,12,24);
+const valveMat=new THREE.MeshPhysicalMaterial({color:0xddbbbb,roughness:0.3,metalness:0.1,clearcoat:0.5});
+const aorticValve=new THREE.Mesh(valveGeo,valveMat);
+aorticValve.position.set(-0.05,0.72,0.1);aorticValve.rotation.x=Math.PI*0.5;
+heartGroup.add(aorticValve);
+
+const pulValve=new THREE.Mesh(valveGeo.clone(),valveMat);
+pulValve.position.set(0.35,0.62,0.35);pulValve.rotation.x=Math.PI*0.45;pulValve.rotation.z=0.2;
+heartGroup.add(pulValve);
+
+/* ---- GLOW SHELL (subsurface effect) ---- */
+const glowMat=new THREE.ShaderMaterial({
+  uniforms:{uPulse:{value:0},viewVector:{value:new THREE.Vector3()}},
+  vertexShader:`
+    uniform float uPulse;uniform vec3 viewVector;varying float vI;
+    void main(){
+      vec3 vN=normalize(normalMatrix*normal);
+      vec3 vV=normalize(normalMatrix*viewVector);
+      vI=pow(1.0-abs(dot(vN,vV)),3.0)*(0.3+uPulse*0.7);
+      gl_Position=projectionMatrix*modelViewMatrix*vec4(position+normal*0.06,1.0);
+    }`,
+  fragmentShader:`
+    uniform float uPulse;varying float vI;
+    void main(){
+      vec3 c=mix(vec3(0.6,0.1,0.1),vec3(1.0,0.2,0.15),uPulse);
+      gl_FragColor=vec4(c,vI*0.45);
+    }`,
+  transparent:true,blending:THREE.AdditiveBlending,side:THREE.FrontSide,depthWrite:false,
+});
+// Clone LV geometry for glow
+const glowMesh=new THREE.Mesh(lvGeo.clone(),glowMat);
+glowMesh.position.copy(lvMesh.position);
+glowMesh.castShadow=false;
+heartGroup.add(glowMesh);
+
+const glowMesh2=new THREE.Mesh(rvGeo.clone(),glowMat);
+glowMesh2.position.copy(rvMesh.position);
+heartGroup.add(glowMesh2);
+
+/* ---- Center & scale the whole heart ---- */
+heartGroup.rotation.set(0.15,0,0.1);
+heartGroup.position.set(0,-0.3,0);
+
+/* ===== CONDUCTION PATH ===== */
+const condPts=[
+  new THREE.Vector3(0.45,1.1,0.65),    // SA Node (front surface of RA)
+  new THREE.Vector3(0.3,0.95,0.7),
+  new THREE.Vector3(0.15,0.78,0.68),   // Through atria
+  new THREE.Vector3(0.1,0.55,0.62),    // AV Node
+  new THREE.Vector3(0.08,0.35,0.55),   // Bundle of His
+  new THREE.Vector3(0.05,0.05,0.6),    // Septum
+  new THREE.Vector3(-0.1,-0.35,0.65),  // Left bundle branch
+  new THREE.Vector3(0.25,-0.3,0.7),    // Right bundle branch
+  new THREE.Vector3(-0.15,-0.7,0.55),  // LV apex (Purkinje)
+  new THREE.Vector3(0.3,-0.65,0.6),    // RV apex (Purkinje)
+];
+const condCurve=new THREE.CatmullRomCurve3(condPts);
+const tubMat=new THREE.ShaderMaterial({
+  uniforms:{uProgress:{value:0},uShow:{value:0}},
+  vertexShader:`varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
+  fragmentShader:`
+    uniform float uProgress,uShow;varying vec2 vUv;
+    void main(){
+      float d=abs(vUv.x-uProgress);
+      float trail=smoothstep(.2,.0,d);
+      float base=smoothstep(1.,.0,d)*.2;
+      vec3 cTrail=vec3(1.,.95,.2);
+      vec3 cBase=vec3(.6,.55,.05);
+      vec3 c=mix(cBase,cTrail,trail);
+      float alpha=(trail*1.2+base)*uShow;
+      gl_FragColor=vec4(c,alpha);
+    }`,
+  transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide,
+});
+const condTubeMesh=new THREE.Mesh(new THREE.TubeGeometry(condCurve,80,.04,12,false),tubMat);
+heartGroup.add(condTubeMesh);
+
+// Node markers — glowing spheres at SA and AV node
+const nodeMat=new THREE.ShaderMaterial({
+  uniforms:{uShow:{value:0},uPulse:{value:0},uColor:{value:new THREE.Color(1,.9,.1)}},
+  vertexShader:`varying vec3 vN;varying vec3 vP;void main(){vN=normalize(normalMatrix*normal);vP=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
+  fragmentShader:`
+    uniform float uShow,uPulse;uniform vec3 uColor;varying vec3 vN;varying vec3 vP;
+    void main(){
+      float glow=0.7+uPulse*0.3;
+      gl_FragColor=vec4(uColor*glow, uShow*0.9);
+    }`,
+  transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide,
+});
+const saNodeGeo=new THREE.SphereGeometry(0.08,16,16);
+const saNodeMesh=new THREE.Mesh(saNodeGeo,nodeMat);
+saNodeMesh.position.copy(condPts[0]);
+heartGroup.add(saNodeMesh);
+
+const avNodeMat=nodeMat.clone();
+avNodeMat.uniforms={uShow:{value:0},uPulse:{value:0},uColor:{value:new THREE.Color(.2,1,.4)}};
+const avNodeMesh=new THREE.Mesh(saNodeGeo.clone(),avNodeMat);
+avNodeMesh.position.copy(condPts[3]);
+heartGroup.add(avNodeMesh);
+
+/* ===== IMPULSE PARTICLES ===== */
+const PC=180;
+const pGeo=new THREE.BufferGeometry();
+const pPos=new Float32Array(PC*3),pAlpha=new Float32Array(PC);
+pGeo.setAttribute('position',new THREE.BufferAttribute(pPos,3));
+pGeo.setAttribute('alpha',new THREE.BufferAttribute(pAlpha,1));
+const pMat=new THREE.ShaderMaterial({
+  uniforms:{uSize:{value:8.},uShow:{value:0}},
+  vertexShader:`attribute float alpha;varying float vA;uniform float uSize;void main(){vA=alpha;vec4 mv=modelViewMatrix*vec4(position,1.);gl_PointSize=uSize*(4./-mv.z);gl_Position=projectionMatrix*mv;}`,
+  fragmentShader:`uniform float uShow;varying float vA;void main(){float d=length(gl_PointCoord-.5);if(d>.5)discard;float a=smoothstep(.5,.02,d)*vA*uShow;vec3 c=mix(vec3(1.,.8,.1),vec3(1.,1.,.7),smoothstep(.3,.0,d));gl_FragColor=vec4(c,a);}`,
+  transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,
+});
+heartGroup.add(new THREE.Points(pGeo,pMat));
+
+/* ===== BACKGROUND PARTICLES ===== */
+const bgPC=250;const bgGeo=new THREE.BufferGeometry();const bgP=new Float32Array(bgPC*3);
+for(let i=0;i<bgPC;i++){bgP[i*3]=(Math.random()-.5)*18;bgP[i*3+1]=(Math.random()-.5)*14;bgP[i*3+2]=(Math.random()-.5)*12-4;}
+bgGeo.setAttribute('position',new THREE.BufferAttribute(bgP,3));
+scene.add(new THREE.Points(bgGeo,new THREE.PointsMaterial({color:0x3355aa,size:0.025,transparent:true,opacity:0.2,blending:THREE.AdditiveBlending,depthWrite:false})));
+
+/* ===== LABELS ===== */
+const labelData=[
+  {name:'SA Node',pos:new THREE.Vector3(0.5,1.15,0.4),desc:'Natural pacemaker'},
+  {name:'AV Node',pos:new THREE.Vector3(0.15,0.55,0.4),desc:'Signal delay ~0.12s'},
+  {name:'Right Atrium',pos:new THREE.Vector3(0.7,1.0,0.45),desc:'Deoxy blood inflow'},
+  {name:'Left Atrium',pos:new THREE.Vector3(-0.5,1.1,0.1),desc:'Oxy blood inflow'},
+  {name:'Right Ventricle',pos:new THREE.Vector3(0.6,-0.2,0.55),desc:'Pumps to lungs'},
+  {name:'Left Ventricle',pos:new THREE.Vector3(-0.5,-0.3,0.4),desc:'Pumps to body'},
+  {name:'Aorta',pos:new THREE.Vector3(0.1,2.2,0),desc:'Main artery out'},
+  {name:'Pulmonary Art.',pos:new THREE.Vector3(-0.2,1.8,0.4),desc:'To lungs'},
+  {name:'SVC',pos:new THREE.Vector3(0.65,2.1,0.1),desc:'Upper body return'},
+  {name:'LAD Artery',pos:new THREE.Vector3(0.05,-0.2,0.8),desc:'Left coronary'},
+];
+const annEls=labelData.map(d=>{
+  const el=document.createElement('div');el.className='annotation';el.style.opacity='0';
+  el.innerHTML=`<div class="aline"></div><div class="atag">${d.name}</div><div class="adesc">${d.desc}</div>`;
+  container.appendChild(el);return{el,wp:d.pos};
+});
+function updateLabels(){
+  if(!S.showLabels){annEls.forEach(a=>a.el.style.opacity='0');return;}
+  const rect=renderer.domElement.getBoundingClientRect();
+  annEls.forEach(a=>{
+    const v=a.wp.clone();heartGroup.localToWorld(v);v.project(camera);
+    a.el.style.left=(v.x*.5+.5)*rect.width+'px';
+    a.el.style.top=(-v.y*.5+.5)*rect.height+'px';
+    a.el.style.transform='translate(-50%,-100%)';
+    a.el.style.opacity=v.z<1?'1':'0';
+  });
+}
+
+/* ===== ECG ENGINE ===== */
+const ecgCanvas=document.getElementById('ecg-canvas'),ecgCtx=ecgCanvas.getContext('2d');
+const ecgFsCanvas=document.getElementById('ecg-canvas-fs'),ecgFsCtx=ecgFsCanvas.getContext('2d');
+const BUF=900;const ecgBuf=new Float32Array(BUF);let ecgW=0;
+function gauss(x,m,s){const d=(x-m)/s;return Math.exp(-.5*d*d);}
+function ecgWave(t){
+  let v=gauss(t,.1,.026)*.16-gauss(t,.178,.009)*.09+gauss(t,.2,.013)*1.0
+    -gauss(t,.222,.011)*.2+gauss(t,.34,.042)*.27+gauss(t,.44,.03)*.03;
+  if(S.noise>0)v+=(Math.random()-.5)*S.noise*.015;
+  return v;
+}
+
+const phases=[
+  {r:[0,.08],t:'SA Node Firing',d:'The sinoatrial node generates an electrical impulse (~60-100/min), acting as the natural pacemaker of the heart.'},
+  {r:[.08,.16],t:'Atrial Depolarization',d:'The impulse spreads across both atria causing contraction, pushing blood into ventricles. This produces the P wave on ECG.'},
+  {r:[.16,.2],t:'AV Node Delay',d:'The atrioventricular node delays the signal ~0.12s allowing ventricles to fill completely before contraction (PR interval).'},
+  {r:[.2,.25],t:'Ventricular Depolarization',d:'Rapid conduction through Bundle of His and Purkinje fibers triggers powerful ventricular contraction — the QRS complex.'},
+  {r:[.25,.45],t:'Ventricular Repolarization',d:'Ventricles recover their resting electrical charge, preparing for the next beat. This creates the T wave on ECG.'},
+  {r:[.45,1],t:'Diastole (Rest)',d:'The heart relaxes and fills with blood. ECG shows a flat isoelectric baseline.'},
+];
+function getPhase(t){for(const p of phases)if(t>=p.r[0]&&t<p.r[1])return p;return phases[5];}
+
+/* ===== UI ===== */
+const btnToggle=document.getElementById('btn-toggle');
+const hrSlider=document.getElementById('hr-slider');
+const speedSlider=document.getElementById('speed-slider');
+const noiseSlider=document.getElementById('noise-slider');
+const learnOverlay=document.getElementById('learn-overlay');
+const sidebar=document.getElementById('sidebar');
+const phaseHud=document.getElementById('phase-hud');
+
+btnToggle.onclick=()=>{S.running=!S.running;btnToggle.textContent=S.running?'Pause':'Start Simulation';btnToggle.classList.toggle('active',S.running);};
+hrSlider.oninput=e=>{S.bpm=+e.target.value;S.beatDuration=60/S.bpm;document.getElementById('hr-val').textContent=S.bpm;document.getElementById('bpm-num').textContent=S.bpm;document.getElementById('stat-bpm').textContent=S.bpm;updateStats();};
+speedSlider.oninput=e=>{S.speed=+e.target.value;document.getElementById('speed-val').textContent=S.speed.toFixed(1);};
+noiseSlider.oninput=e=>{S.noise=+e.target.value;document.getElementById('noise-val').textContent=Math.round(S.noise);};
+
+document.getElementById('btn-labels').onclick=function(){S.showLabels=!S.showLabels;this.classList.toggle('active',S.showLabels);};
+document.getElementById('btn-conduction').onclick=function(){S.showConduction=!S.showConduction;this.classList.toggle('active',S.showConduction);};
+document.getElementById('btn-learn').onclick=function(){
+  S.showLearn=!S.showLearn;this.classList.toggle('active',S.showLearn);
+  learnOverlay.classList.toggle('show',S.showLearn);phaseHud.style.opacity=S.showLearn?'1':'0';
+};
+document.getElementById('btn-reset-cam').onclick=()=>{
+  orbitCtrl.enabled=false;
+  camera.position.set(0,0.8,5.5);
+  camera.rotation.set(0,0,0);
+  camera.lookAt(0,-0.2,0);
+  orbitCtrl.target.set(0,-0.2,0);
+  camera.updateProjectionMatrix();
+  orbitCtrl.enabled=true;
+  orbitCtrl.saveState();
+  orbitCtrl.reset();
+  orbitCtrl.update();
+};
+document.getElementById('drawer-toggle').onclick=()=>sidebar.classList.toggle('open');
+
+let touchY=0;
+sidebar.addEventListener('touchstart',e=>{touchY=e.touches[0].clientY;},{passive:true});
+sidebar.addEventListener('touchmove',e=>{if(e.touches[0].clientY-touchY>60)sidebar.classList.remove('open');},{passive:true});
+
+document.querySelectorAll('.preset-btn').forEach(b=>{
+  b.onclick=()=>{
+    const bpm=+b.dataset.bpm;S.bpm=bpm;S.beatDuration=60/bpm;hrSlider.value=bpm;
+    document.getElementById('hr-val').textContent=bpm;document.getElementById('bpm-num').textContent=bpm;
+    document.getElementById('stat-bpm').textContent=bpm;updateStats();
+    if(!S.running){S.running=true;btnToggle.textContent='Pause';btnToggle.classList.add('active');}
+  };
+});
+
+document.getElementById('btn-fullscreen-ecg').onclick=()=>{S.fullscreenECG=true;document.getElementById('ecg-fullscreen').classList.add('show');resizeFsCanvas();};
+document.getElementById('close-fs').onclick=()=>{S.fullscreenECG=false;document.getElementById('ecg-fullscreen').classList.remove('show');};
+
+function updateStats(){
+  const rr=60000/S.bpm;
+  document.getElementById('stat-pr').textContent=Math.round(120+(S.bpm-60)*0.15);
+  document.getElementById('stat-qrs').textContent=Math.round(88+(S.bpm-60)*0.05);
+  document.getElementById('stat-qt').textContent=Math.round(380*Math.sqrt(rr/1000));
+}
+updateStats();
+
+function onResize(){
+  const r=container.getBoundingClientRect();
+  if(r.width>0&&r.height>0){camera.aspect=r.width/r.height;camera.updateProjectionMatrix();renderer.setSize(r.width,r.height);}
+  const er=ecgCanvas.parentElement.getBoundingClientRect();const dpr=window.devicePixelRatio;
+  ecgCanvas.width=er.width*dpr;ecgCanvas.height=er.height*dpr;
+  ecgCanvas.style.width=er.width+'px';ecgCanvas.style.height=er.height+'px';
+}
+function resizeFsCanvas(){
+  const dpr=window.devicePixelRatio;
+  ecgFsCanvas.width=window.innerWidth*.95*dpr;ecgFsCanvas.height=window.innerHeight*.7*dpr;
+  ecgFsCanvas.style.width=Math.round(window.innerWidth*.95)+'px';ecgFsCanvas.style.height=Math.round(window.innerHeight*.7)+'px';
+}
+window.addEventListener('resize',()=>{onResize();if(S.fullscreenECG)resizeFsCanvas();});
+setTimeout(onResize,80);
+
+/* ===== MAIN LOOP ===== */
+const clock=new THREE.Clock();
+const allOrgans=[heartMat,vesselMat,aortaMat,veinMat];
+
+function animate(){
+  requestAnimationFrame(animate);
+  const dt=clock.getDelta();
+  S.time+=dt;
+
+  if(S.running){
+    S.phaseTime+=dt*S.speed;
+    if(S.phaseTime>S.beatDuration)S.phaseTime-=S.beatDuration;
+    S.phase=S.phaseTime/S.beatDuration;
+  }
+
+  // Pulse calculation
+  const tp=S.running?(S.phase<.25?Math.sin(S.phase/.25*Math.PI):0):0;
+  S.pulseScale+=(1+tp*.055-S.pulseScale)*.12;
+
+  // Anatomical pulse — ventricles contract more, atria contract earlier
+  const atrialPulse=S.running?(S.phase<.15?Math.sin(S.phase/.15*Math.PI)*.04:0):0;
+  const ventPulse=tp*.06;
+
+  // Animate chamber scales
+  lvMesh.scale.setScalar(1-ventPulse*0.8);
+  rvMesh.scale.setScalar(1-ventPulse*0.7);
+  laMesh.scale.setScalar(1-atrialPulse*6);
+  raMesh.scale.setScalar(1-atrialPulse*5.5);
+
+  heartGroup.scale.setScalar(S.pulseScale);
+
+  // Gentle breathing-like rotation
+  heartGroup.rotation.y=0+Math.sin(S.time*.25)*.12;
+  heartGroup.rotation.x=0.15+Math.sin(S.time*.18)*.02;
+
+  // Update all organ shader materials
+  const vp=camera.position.clone();
+  allOrgans.forEach(m=>{
+    m.uniforms.uTime.value=S.time;
+    m.uniforms.uPulse.value=tp;
+    m.uniforms.viewPos.value=vp;
+  });
+
+  // Glow
+  glowMat.uniforms.viewVector.value=camera.position.clone().sub(heartGroup.position).normalize();
+  glowMat.uniforms.uPulse.value=tp;
+
+  // Lights pulse
+  rimL.intensity=.7+tp*.8;
+  topL.intensity=.4+tp*.3;
+  backL.intensity=.5+tp*.4;
+
+  // Conduction
+  const cShow=S.showConduction?1:0;
+  tubMat.uniforms.uShow.value+=(cShow-tubMat.uniforms.uShow.value)*.12;
+  tubMat.uniforms.uProgress.value=S.running?S.phase:0;
+  pMat.uniforms.uShow.value=tubMat.uniforms.uShow.value;
+
+  // Node markers
+  nodeMat.uniforms.uShow.value=tubMat.uniforms.uShow.value;
+  nodeMat.uniforms.uPulse.value=S.running?(S.phase<.1?Math.sin(S.phase/.1*Math.PI):0):0;
+  avNodeMat.uniforms.uShow.value=tubMat.uniforms.uShow.value;
+  avNodeMat.uniforms.uPulse.value=S.running?(S.phase>.15&&S.phase<.25?Math.sin((S.phase-.15)/.1*Math.PI):0):0;
+  // Pulsate node size
+  const saScale=1+nodeMat.uniforms.uPulse.value*0.5;
+  saNodeMesh.scale.setScalar(saScale);
+  const avScale=1+avNodeMat.uniforms.uPulse.value*0.5;
+  avNodeMesh.scale.setScalar(avScale);
+
+  if(S.running&&S.showConduction){
+    for(let i=0;i<PC;i++){
+      const sp=(Math.random()-.5)*.26;
+      const t=Math.max(0,Math.min(1,S.phase+sp));
+      const pt=condCurve.getPointAt(t);
+      pPos[i*3]=pt.x+(Math.random()-.5)*.12;
+      pPos[i*3+1]=pt.y+(Math.random()-.5)*.12;
+      pPos[i*3+2]=pt.z+(Math.random()-.5)*.08+0.05;
+      pAlpha[i]=Math.max(0,1-Math.abs(sp)*6)*1.0;
+    }
+    pGeo.attributes.position.needsUpdate=true;
+    pGeo.attributes.alpha.needsUpdate=true;
+  }
+
+  // BG particles
+  for(let i=0;i<bgPC;i++){bgP[i*3+1]+=dt*.06;if(bgP[i*3+1]>7)bgP[i*3+1]=-7;}
+  bgGeo.attributes.position.needsUpdate=true;
+
+  // ECG
+  if(S.running){
+    const spf=(BUF/S.beatDuration)*dt*S.speed/2;
+    for(let i=0;i<Math.max(1,Math.round(spf));i++){ecgBuf[ecgW]=ecgWave(S.phase);ecgW=(ecgW+1)%BUF;}
+  }
+
+  // Learn
+  if(S.showLearn&&S.running){
+    const p=getPhase(S.phase);
+    document.getElementById('phase-title').textContent=p.t;
+    document.getElementById('phase-desc').textContent=p.d;
+    document.getElementById('phase-title2').textContent=p.t;
+    document.getElementById('phase-desc2').textContent=p.d;
+    document.getElementById('lo-bar-fill').style.width=(S.phase*100)+'%';
+  }
+
+  drawECG(ecgCtx,ecgCanvas.width,ecgCanvas.height);
+  if(S.fullscreenECG)drawECG(ecgFsCtx,ecgFsCanvas.width,ecgFsCanvas.height);
+  updateLabels();
+  orbitCtrl.update();
+  renderer.render(scene,camera);
+}
+
+function drawECG(ctx,w,h){
+  const dpr=window.devicePixelRatio;
+  ctx.fillStyle='#080c16';ctx.fillRect(0,0,w,h);
+  const gs=Math.max(12,18*dpr);
+  ctx.strokeStyle='rgba(34,197,94,.055)';ctx.lineWidth=.5*dpr;ctx.beginPath();
+  for(let x=0;x<w;x+=gs){ctx.moveTo(x,0);ctx.lineTo(x,h);}
+  for(let y=0;y<h;y+=gs){ctx.moveTo(0,y);ctx.lineTo(w,y);}
+  ctx.stroke();
+  const mg=gs*5;ctx.strokeStyle='rgba(34,197,94,.1)';ctx.lineWidth=dpr;ctx.beginPath();
+  for(let x=0;x<w;x+=mg){ctx.moveTo(x,0);ctx.lineTo(x,h);}
+  for(let y=0;y<h;y+=mg){ctx.moveTo(0,y);ctx.lineTo(w,y);}
+  ctx.stroke();
+
+  const mid=h*.5,amp=h*.38;
+  ctx.save();ctx.shadowColor='#22c55e';ctx.shadowBlur=10*dpr;ctx.strokeStyle='#22c55e';ctx.lineWidth=2.2*dpr;
+  ctx.beginPath();let on=false;
+  for(let i=0;i<BUF;i++){
+    const idx=(ecgW+i)%BUF,x=(i/BUF)*w,y=mid-ecgBuf[idx]*amp;
+    if(BUF-i<22){on=false;continue;}
+    if(!on){ctx.moveTo(x,y);on=true;}else ctx.lineTo(x,y);
+  }
+  ctx.stroke();ctx.restore();
+
+  ctx.strokeStyle='rgba(74,222,128,.85)';ctx.lineWidth=1.2*dpr;ctx.beginPath();on=false;
+  for(let i=0;i<BUF;i++){
+    const idx=(ecgW+i)%BUF,x=(i/BUF)*w,y=mid-ecgBuf[idx]*amp;
+    if(BUF-i<22){on=false;continue;}
+    if(!on){ctx.moveTo(x,y);on=true;}else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+
+  const hx=((BUF-1)/BUF)*w,hy=mid-ecgBuf[(ecgW-1+BUF)%BUF]*amp;
+  ctx.save();ctx.shadowColor='#22c55e';ctx.shadowBlur=14*dpr;ctx.fillStyle='#4ade80';
+  ctx.beginPath();ctx.arc(hx,hy,3.5*dpr,0,Math.PI*2);ctx.fill();ctx.restore();
+
+  if(S.showLearn&&S.running){
+    ctx.font=`bold ${Math.max(9,10*dpr)}px system-ui`;ctx.textAlign='center';
+    [{n:'P',p:.1,c:'#60a5fa'},{n:'QRS',p:.2,c:'#f87171'},{n:'T',p:.35,c:'#facc15'}].forEach(l=>{
+      let pd=S.phase-l.p;if(pd<0)pd+=1;
+      const sa=pd*BUF,bi=(ecgW-Math.round(sa)+BUF*10)%BUF;
+      const xp=((bi<ecgW?(bi+BUF-ecgW+BUF)%BUF:bi-ecgW)/BUF)*w;
+      if(xp>20&&xp<w-40){ctx.fillStyle=l.c;ctx.fillText(l.n,xp,Math.max(14,16*dpr));}
+    });
+  }
+  ctx.strokeStyle='rgba(148,163,184,.06)';ctx.lineWidth=dpr;ctx.setLineDash([4*dpr,6*dpr]);
+  ctx.beginPath();ctx.moveTo(0,mid);ctx.lineTo(w,mid);ctx.stroke();ctx.setLineDash([]);
+}
+
+requestAnimationFrame(animate);
+</script>
+</body>
+</html>
